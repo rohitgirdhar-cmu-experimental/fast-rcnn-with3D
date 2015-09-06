@@ -16,6 +16,7 @@ import scipy.io as sio
 import utils.cython_bbox
 import cPickle
 import subprocess
+import sys
 
 class sunrgbd(datasets.imdb):
     def __init__(self, image_set, data_path):
@@ -121,7 +122,7 @@ class sunrgbd(datasets.imdb):
             print '{} gt roidb loaded from {}'.format(self.name, cache_file)
             return roidb
 
-        gt_roidb = self._load_sunrgbd_annotations()
+        gt_roidb = self._load_sunrgbd_annotations(self.image_index)
         with open(cache_file, 'wb') as fid:
             cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
         print 'wrote gt roidb to {}'.format(cache_file)
@@ -154,17 +155,17 @@ class sunrgbd(datasets.imdb):
         return roidb
 
     def _load_selective_search_roidb(self, gt_roidb):
-        filename = os.path.abspath(os.path.join(self.cache_path, '..',
-                                                'selective_search_data',
-                                                self.name + '.mat'))
-        assert os.path.exists(filename), \
-               'Selective search data not found at: {}'.format(filename)
-        raw_data = sio.loadmat(filename)['boxes'].ravel()
-
         box_list = []
-        for i in xrange(raw_data.shape[0]):
-            box_list.append(raw_data[i][:, (1, 0, 3, 2)] - 1)
-
+        for ix, el in enumerate(self._image_index_ids):
+          filename = os.path.abspath(os.path.join(self._data_path,
+                'Processed/Features/0001_SelectiveSearch/',
+                str(el) + '.mat'))
+          assert os.path.exists(filename), \
+                 'Selective search data not found at: {}'.format(filename)
+          boxes = sio.loadmat(filename)['boxes']
+          box_list.append(boxes[:, (1,0,3,2)] - 1)
+          assert(boxes[:, 2] >= boxes[:, 0], 
+              'Selective search output faulty for %d' % el)
         return self.create_roidb_from_box_list(box_list, gt_roidb)
 
     def selective_search_IJCV_roidb(self):
@@ -185,8 +186,6 @@ class sunrgbd(datasets.imdb):
             return roidb
 
         gt_roidb = self.gt_roidb()
-        import pdb
-        pdb.set_trace()
         ss_roidb = self._load_selective_search_IJCV_roidb(gt_roidb)
         roidb = datasets.imdb.merge_roidbs(gt_roidb, ss_roidb)
         with open(cache_file, 'wb') as fid:
@@ -222,7 +221,7 @@ class sunrgbd(datasets.imdb):
 
         res = {}
         for i in range(len(gtstruct['groundtruth'])):
-          sqname = gtstruct['groundtruth'][i].sequenceName.rstrip('/')
+          sqname = gtstruct['groundtruth'][i].sequenceName
           if sqname in res.keys():
             res[sqname].append((gtstruct['groundtruth'][i].classname, 
                   gtstruct['groundtruth'][i].gtBb2D))
@@ -231,32 +230,43 @@ class sunrgbd(datasets.imdb):
                   gtstruct['groundtruth'][i].gtBb2D)]
         return res
 
-    def _load_sunrgbd_annotations(self):
+    def _load_sunrgbd_annotations(self, image_index):
         """
         Load image and bounding boxes info from MAT file in the SUNGRGBD
         format.
         """
         res = []
         all_annots = self._read_sunrgbd_annot_file()
-        for imidx in self.image_index:        
+        for imidx in image_index:
+          sqname = imidx[:imidx.find('/image/')]
           annots = []
-          if imidx in all_annots.keys():
-            annots = all_annots[imidx]
+          if sqname in all_annots.keys():
+            annots = all_annots[sqname]
           
-          num_objs = len(annots)
-          boxes = np.zeros((num_objs, 4), dtype=np.uint16)
+          num_objs = 0 # assume, initially
+          boxes = np.zeros((num_objs, 4), dtype=np.uint32)
           gt_classes = np.zeros((num_objs), dtype=np.int32)
           overlaps = np.zeros((num_objs, self.num_classes), dtype=np.float32)
-          
+         
           for ix, annot in enumerate(annots):
-            x1 = annot[1][0] - 1
-            y1 = annot[1][1] - 1
-            x2 = annot[1][2] - 1
-            y2 = annot[1][3] - 1
-            cls = self._class_to_ind[annot[0].lower().strip()]
-            boxes[ix, :] = [x1, y1, x2, y2]
-            gt_classes[ix] = cls
-            overlaps[ix, cls] = 1.0
+            try:
+              # this annot array is somehow uint8...
+              x1 = float(annot[1][0]) - 1
+              y1 = float(annot[1][1]) - 1
+              x2 = float(annot[1][0]) + float(annot[1][2]) - 1
+              y2 = float(annot[1][1]) + float(annot[1][3]) - 1
+              if annot[0].lower().strip() not in self._classes:
+                continue
+              cls = self._class_to_ind[annot[0].lower().strip()]
+            except:
+              sys.stderr.write('Unable to read annot for %s, %d\n' % (imidx, ix))
+              continue
+            boxes = np.vstack((boxes, [x1, y1, x2, y2]))
+            gt_classes = np.hstack((gt_classes, cls))
+            thisoverlap = np.zeros((1, self.num_classes), dtype=np.float32)
+            thisoverlap[0, cls] = 1.0
+            overlaps = np.vstack((overlaps, thisoverlap))
+
           overlaps = scipy.sparse.csr_matrix(overlaps)
           res.append({'boxes' : boxes,
                       'gt_classes' : gt_classes,
