@@ -7,6 +7,7 @@
 
 from .imdb import imdb
 from .pascal_voc import pascal_voc
+from .sunrgbd import sunrgbd
 from . import factory
 
 import os.path as osp

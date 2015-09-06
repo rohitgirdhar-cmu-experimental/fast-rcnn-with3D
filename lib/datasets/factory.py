@@ -10,6 +10,7 @@
 __sets = {}
 
 import datasets.pascal_voc
+import datasets.sunrgbd
 import numpy as np
 
 def _selective_search_IJCV_top_k(split, year, top_k):
@@ -27,6 +28,7 @@ for year in ['2007', '2012']:
         name = 'voc_{}_{}'.format(year, split)
         __sets[name] = (lambda split=split, year=year:
                 datasets.pascal_voc(split, year))
+__sets['sunrgbd'] = (lambda split=split: datasets.sunrgbd(split, '/home/rgirdhar/Work/Data/010_SunRGBD/'))
 
 # Set up voc_<year>_<split>_top_<k> using selective search "quality" mode
 # but only returning the first k boxes
