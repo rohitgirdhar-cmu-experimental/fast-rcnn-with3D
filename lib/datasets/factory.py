@@ -28,7 +28,10 @@ for year in ['2007', '2012']:
         name = 'voc_{}_{}'.format(year, split)
         __sets[name] = (lambda split=split, year=year:
                 datasets.pascal_voc(split, year))
-__sets['sunrgbd'] = (lambda split=split: datasets.sunrgbd(split, '/home/rgirdhar/Work/Data/010_SunRGBD/'))
+for split in ['train', 'val', 'trainval', 'test']:
+  name = 'sunrgbd_{}'.format(split)
+  __sets[name] = (lambda split=split:
+      datasets.sunrgbd(split, '/home/rgirdhar/Work/Data/010_SunRGBD/'))
 
 # Set up voc_<year>_<split>_top_<k> using selective search "quality" mode
 # but only returning the first k boxes

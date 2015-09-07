@@ -100,8 +100,18 @@ class sunrgbd(datasets.imdb):
                 'image', 
                 all_imgs_list['SUNRGBDMeta'][0][i].rgbname[0]))
             corr_image_ids.append(i+1)
-        self._image_index_ids = corr_image_ids
-        return final_image_index
+
+        # remove empty images TODO: Figure the right way of doing this
+        final_image_index2 = []
+        corr_image_ids2 = []
+        annots = self._load_sunrgbd_annotations(final_image_index)
+        for ix, annot in enumerate(annots):
+          if np.shape(annot['boxes'])[0] > 0:
+            final_image_index2.append(final_image_index[ix])
+            corr_image_ids2.append(corr_image_ids[ix])
+
+        self._image_index_ids = corr_image_ids2
+        return final_image_index2
 
     def _get_default_path(self):
         """
